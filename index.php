@@ -2,12 +2,15 @@
 require_once 'includes/header.php';
 require_once 'includes/navbar.php';
 
-// Get featured routes
-$stmt = $pdo->query("SELECT * FROM Route ORDER BY route_id DESC LIMIT 6");
-$featured_routes = $stmt->fetchAll();
+// ดึงข้อมูลเส้นทางแนะนำ
+$result = $conn->query("SELECT * FROM Route ORDER BY route_id DESC LIMIT 6");
+$featured_routes = [];
+while ($row = $result->fetch_assoc()) {
+    $featured_routes[] = $row;
+}
 
-// Get popular routes (based on tickets)
-$stmt = $pdo->query("
+// ดึงข้อมูลเส้นทางยอดนิยม (จากจำนวนตั๋ว)
+$result = $conn->query("
     SELECT r.*, COUNT(t.ticket_id) as ticket_count
     FROM Route r
     LEFT JOIN Schedule s ON r.route_id = s.route_id
@@ -16,10 +19,13 @@ $stmt = $pdo->query("
     ORDER BY ticket_count DESC
     LIMIT 6
 ");
-$popular_routes = $stmt->fetchAll();
+$popular_routes = [];
+while ($row = $result->fetch_assoc()) {
+    $popular_routes[] = $row;
+}
 
-// Get next departure schedules
-$stmt = $pdo->prepare("
+// ดึงข้อมูลตารางเดินทางที่กำลังจะออกเดินทาง
+$stmt = $conn->prepare("
     SELECT s.*, r.source, r.destination, b.bus_name, b.bus_type, e.first_name, e.last_name
     FROM Schedule s
     JOIN Route r ON s.route_id = r.route_id
@@ -30,41 +36,56 @@ $stmt = $pdo->prepare("
     LIMIT 5
 ");
 $stmt->execute();
-$upcoming_departures = $stmt->fetchAll();
+$result = $stmt->get_result();
+$upcoming_departures = [];
+while ($row = $result->fetch_assoc()) {
+    $upcoming_departures[] = $row;
+}
 
-// Get count of total buses, routes, and schedules
-$stmt = $pdo->query("SELECT COUNT(*) FROM Bus");
-$total_buses = $stmt->fetchColumn();
+// ดึงจำนวนรถ เส้นทาง และตารางเดินทางทั้งหมด
+$result = $conn->query("SELECT COUNT(*) as count FROM Bus");
+$row = $result->fetch_assoc();
+$total_buses = $row['count'];
 
-$stmt = $pdo->query("SELECT COUNT(*) FROM Route");
-$total_routes = $stmt->fetchColumn();
+$result = $conn->query("SELECT COUNT(*) as count FROM Route");
+$row = $result->fetch_assoc();
+$total_routes = $row['count'];
 
-$stmt = $pdo->query("SELECT COUNT(*) FROM Schedule");
-$total_schedules = $stmt->fetchColumn();
+$result = $conn->query("SELECT COUNT(*) as count FROM Schedule");
+$row = $result->fetch_assoc();
+$total_schedules = $row['count'];
 
-// Fetch all unique sources and destinations from Route table for dropdowns
-$routeStmt = $pdo->query("SELECT DISTINCT source FROM Route ORDER BY source");
-$sources = $routeStmt->fetchAll(PDO::FETCH_COLUMN);
+// ดึงต้นทางและปลายทางที่ไม่ซ้ำกันจากตาราง Route สำหรับดรอปดาวน์
+$result = $conn->query("SELECT DISTINCT source FROM Route ORDER BY source");
+$sources = [];
+while ($row = $result->fetch_assoc()) {
+    $sources[] = $row['source'];
+}
 
-$routeStmt = $pdo->query("SELECT DISTINCT destination FROM Route ORDER BY destination");
-$destinations = $routeStmt->fetchAll(PDO::FETCH_COLUMN);
+$result = $conn->query("SELECT DISTINCT destination FROM Route ORDER BY destination");
+$destinations = [];
+while ($row = $result->fetch_assoc()) {
+    $destinations[] = $row['destination'];
+}
 
-// Set minimum date to today for the date picker
+// กำหนดวันที่ขั้นต่ำเป็นวันนี้สำหรับตัวเลือกวันที่
 $min_date = date('Y-m-d');
 ?>
 
 <!-- Add CSS for the hero section with search -->
 <style>
-.hero-section {
-    background: linear-gradient(135deg, #0062cc 0%, #0096ff 100%);
-    padding: 50px 0;
-}
-.card {
-    transition: transform 0.3s;
-}
-.card:hover {
-    transform: translateY(-5px);
-}
+    .hero-section {
+        background: linear-gradient(135deg, #0062cc 0%, #0096ff 100%);
+        padding: 50px 0;
+    }
+
+    .card {
+        transition: transform 0.3s;
+    }
+
+    .card:hover {
+        transform: translateY(-5px);
+    }
 </style>
 
 <!-- Hero Section with Search -->
@@ -73,7 +94,6 @@ $min_date = date('Y-m-d');
         <div class="row align-items-center">
             <div class="col-lg-6">
                 <h1 class="display-4 fw-bold mb-3">จองตั๋วรถโดยสารออนไลน์</h1>
-                <p class="lead mb-4">บริการจองตั๋วรถโดยสารที่สะดวก รวดเร็ว และปลอดภัย ครอบคลุมเส้นทางทั่วประเทศ</p>
                 <div class="d-flex gap-2">
                     <?php if (!isset($_SESSION['user_id'])): ?>
                         <a href="/bus_booking_system/auth/register.php" class="btn btn-light btn-lg">สมัครสมาชิก</a>
@@ -170,7 +190,7 @@ $min_date = date('Y-m-d');
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h5 class="card-title mb-0">
-                                <?php echo htmlspecialchars($route['source']); ?> - 
+                                <?php echo htmlspecialchars($route['source']); ?> -
                                 <?php echo htmlspecialchars($route['destination']); ?>
                             </h5>
                             <span class="badge bg-primary rounded-pill">

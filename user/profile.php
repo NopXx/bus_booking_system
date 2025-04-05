@@ -2,18 +2,20 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get user information
-$stmt = $pdo->prepare("SELECT * FROM User WHERE user_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$user = $stmt->fetch();
+// ดึงข้อมูลผู้ใช้
+$stmt = $conn->prepare("SELECT * FROM User WHERE user_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$user = $result->fetch_assoc();
 
-// Handle form submission
+// จัดการการส่งแบบฟอร์ม
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $first_name = $_POST['first_name'];
     $last_name = $_POST['last_name'];
@@ -24,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     $errors = [];
     
-    // Validate current password if trying to change password
+    // ตรวจสอบรหัสผ่านปัจจุบันหากต้องการเปลี่ยนรหัสผ่าน
     if (!empty($current_password)) {
         if (!password_verify($current_password, $user['password'])) {
             $errors[] = "รหัสผ่านปัจจุบันไม่ถูกต้อง";
@@ -38,22 +40,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($errors)) {
         try {
             if (!empty($new_password)) {
-                // Update with new password
-                $stmt = $pdo->prepare("UPDATE User SET first_name = ?, last_name = ?, tel = ?, password = ? WHERE user_id = ?");
-                $stmt->execute([$first_name, $last_name, $tel, password_hash($new_password, PASSWORD_DEFAULT), $_SESSION['user_id']]);
+                // อัปเดตข้อมูลพร้อมรหัสผ่านใหม่
+                $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+                $stmt = $conn->prepare("UPDATE User SET first_name = ?, last_name = ?, tel = ?, password = ? WHERE user_id = ?");
+                $stmt->bind_param("ssssi", $first_name, $last_name, $tel, $hashed_password, $_SESSION['user_id']);
+                $stmt->execute();
             } else {
-                // Update without changing password
-                $stmt = $pdo->prepare("UPDATE User SET first_name = ?, last_name = ?, tel = ? WHERE user_id = ?");
-                $stmt->execute([$first_name, $last_name, $tel, $_SESSION['user_id']]);
+                // อัปเดตข้อมูลโดยไม่เปลี่ยนรหัสผ่าน
+                $stmt = $conn->prepare("UPDATE User SET first_name = ?, last_name = ?, tel = ? WHERE user_id = ?");
+                $stmt->bind_param("sssi", $first_name, $last_name, $tel, $_SESSION['user_id']);
+                $stmt->execute();
             }
             
             $success = "อัปเดตข้อมูลสำเร็จ";
             
-            // Refresh user data
-            $stmt = $pdo->prepare("SELECT * FROM User WHERE user_id = ?");
-            $stmt->execute([$_SESSION['user_id']]);
-            $user = $stmt->fetch();
-        } catch (PDOException $e) {
+            // รีเฟรชข้อมูลผู้ใช้
+            $stmt = $conn->prepare("SELECT * FROM User WHERE user_id = ?");
+            $stmt->bind_param("i", $_SESSION['user_id']);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user = $result->fetch_assoc();
+        } catch (Exception $e) {
             $errors[] = "เกิดข้อผิดพลาดในการอัปเดตข้อมูล";
         }
     }

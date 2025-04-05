@@ -2,57 +2,69 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in as employee
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบในฐานะพนักงานหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'employee') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get employee ID
-$stmt = $pdo->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$employee = $stmt->fetch();
+// ดึงรหัสพนักงาน
+$stmt = $conn->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$employee = $result->fetch_assoc();
 $employee_id = $employee['employee_id'];
 
-// Handle ticket status update
+// จัดการการอัปเดตสถานะตั๋ว
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_id']) && isset($_POST['status'])) {
     $ticket_id = (int)$_POST['ticket_id'];
     $status = $_POST['status'];
+    $current_date = date('Y-m-d H:i:s'); // เพิ่มวันที่ปัจจุบัน
     
     try {
-        $stmt = $pdo->prepare("UPDATE Ticket SET status = ? WHERE ticket_id = ?");
-        $stmt->execute([$status, $ticket_id]);
+        if ($status === 'issued') {
+            // ถ้าสถานะเป็น issued ให้อัปเดตทั้ง status และ ticket_date
+            $stmt = $conn->prepare("UPDATE Ticket SET status = ?, ticket_date = ? WHERE ticket_id = ?");
+            $stmt->bind_param("ssi", $status, $current_date, $ticket_id);
+        } else {
+            // สถานะอื่นๆ อัปเดตเฉพาะ status
+            $stmt = $conn->prepare("UPDATE Ticket SET status = ? WHERE ticket_id = ?");
+            $stmt->bind_param("si", $status, $ticket_id);
+        }
+        $stmt->execute();
         $success = "อัปเดตสถานะตั๋วสำเร็จ";
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         $error = "เกิดข้อผิดพลาดในการอัปเดตสถานะตั๋ว";
     }
 }
 
-// Handle ticket deletion
+// จัดการการลบตั๋ว
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_ticket'])) {
     $ticket_id = (int)$_POST['ticket_id'];
     
     try {
-        $stmt = $pdo->prepare("DELETE FROM Ticket WHERE ticket_id = ?");
-        $stmt->execute([$ticket_id]);
+        $stmt = $conn->prepare("DELETE FROM Ticket WHERE ticket_id = ?");
+        $stmt->bind_param("i", $ticket_id);
+        $stmt->execute();
         $success = "ลบตั๋วสำเร็จ";
         
-        // Redirect to tickets list if we were on a specific ticket page
+        // เปลี่ยนเส้นทางไปยังรายการตั๋วหากเราอยู่ในหน้าแสดงตั๋วที่เฉพาะเจาะจง
         if (isset($_GET['id']) && $_GET['id'] == $ticket_id) {
             header('Location: /bus_booking_system/employee/tickets.php');
             exit();
         }
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         $error = "เกิดข้อผิดพลาดในการลบตั๋ว: " . $e->getMessage();
     }
 }
 
-// Get specific ticket details if ID is provided
+// ดึงรายละเอียดตั๋วเฉพาะหากมีการระบุ ID
 $ticket = null;
 if (isset($_GET['id']) && is_numeric($_GET['id'])) {
     $ticket_id = (int)$_GET['id'];
     
-    $stmt = $pdo->prepare("
+    $stmt = $conn->prepare("
         SELECT t.*, u.first_name, u.last_name, u.tel, s.date_travel, s.departure_time, s.arrival_time, s.priec,
                b.bus_name, b.bus_type, r.source, r.destination, e.first_name as emp_first_name, e.last_name as emp_last_name
         FROM Ticket t
@@ -63,12 +75,14 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         JOIN employee e ON t.employee_id = e.employee_id
         WHERE t.ticket_id = ?
     ");
-    $stmt->execute([$ticket_id]);
-    $ticket = $stmt->fetch();
+    $stmt->bind_param("i", $ticket_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $ticket = $result->fetch_assoc();
 }
 
-// Get all tickets with related information
-$stmt = $pdo->query("
+// ดึงข้อมูลตั๋วทั้งหมดพร้อมข้อมูลที่เกี่ยวข้อง
+$result = $conn->query("
     SELECT t.*, u.first_name, u.last_name, s.date_travel, s.departure_time, s.arrival_time, s.priec,
            b.bus_name, b.bus_type, r.source, r.destination
     FROM Ticket t
@@ -78,7 +92,10 @@ $stmt = $pdo->query("
     JOIN Route r ON s.route_id = r.route_id
     ORDER BY t.booking_date DESC, t.ticket_date DESC
 ");
-$tickets = $stmt->fetchAll();
+$tickets = [];
+while ($row = $result->fetch_assoc()) {
+    $tickets[] = $row;
+}
 ?>
 
 <div class="container-fluid mt-4">

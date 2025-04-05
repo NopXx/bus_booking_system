@@ -6,16 +6,22 @@ $source = $_GET['source'] ?? '';
 $destination = $_GET['destination'] ?? '';
 $date = $_GET['date'] ?? '';
 
-// Fetch all unique sources and destinations from Route table
-$routeStmt = $pdo->query("SELECT DISTINCT source FROM Route ORDER BY source");
-$sources = $routeStmt->fetchAll(PDO::FETCH_COLUMN);
+// ดึงต้นทางและปลายทางที่ไม่ซ้ำกันจากตาราง Route
+$result = $conn->query("SELECT DISTINCT source FROM Route ORDER BY source");
+$sources = [];
+while ($row = $result->fetch_assoc()) {
+    $sources[] = $row['source'];
+}
 
-$routeStmt = $pdo->query("SELECT DISTINCT destination FROM Route ORDER BY destination");
-$destinations = $routeStmt->fetchAll(PDO::FETCH_COLUMN);
+$result = $conn->query("SELECT DISTINCT destination FROM Route ORDER BY destination");
+$destinations = [];
+while ($row = $result->fetch_assoc()) {
+    $destinations[] = $row['destination'];
+}
 
 $schedules = [];
 if ($source && $destination && $date) {
-    $stmt = $pdo->prepare("
+    $stmt = $conn->prepare("
         SELECT s.*, r.source, r.destination, b.bus_name, b.bus_type, e.first_name, e.last_name
         FROM Schedule s
         JOIN Route r ON s.route_id = r.route_id
@@ -24,8 +30,13 @@ if ($source && $destination && $date) {
         WHERE r.source = ? AND r.destination = ? AND s.date_travel = ?
         ORDER BY s.departure_time
     ");
-    $stmt->execute([$source, $destination, $date]);
-    $schedules = $stmt->fetchAll();
+    $stmt->bind_param("sss", $source, $destination, $date);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $schedules = [];
+    while ($row = $result->fetch_assoc()) {
+        $schedules[] = $row;
+    }
 }
 ?>
 

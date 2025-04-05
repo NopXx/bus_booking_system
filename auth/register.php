@@ -8,20 +8,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $last_name = $_POST['last_name'];
     $tel = $_POST['tel'];
     
-    // Check if username already exists
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM User WHERE username = ?");
-    $stmt->execute([$username]);
-    if ($stmt->fetchColumn() > 0) {
+    // ตรวจสอบว่าชื่อผู้ใช้มีอยู่ในระบบแล้วหรือไม่
+    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM User WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    
+    if ($row['count'] > 0) {
         $error = "ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว";
     } else {
         try {
-            $stmt = $pdo->prepare("INSERT INTO User (username, password, first_name, last_name, tel) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$username, $password, $first_name, $last_name, $tel]);
+            $stmt = $conn->prepare("INSERT INTO User (username, password, first_name, last_name, tel) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssss", $username, $password, $first_name, $last_name, $tel);
+            $stmt->execute();
             
             $_SESSION['success'] = "ลงทะเบียนสำเร็จ กรุณาเข้าสู่ระบบ";
             header('Location: /bus_booking_system/auth/login.php');
             exit();
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             $error = "เกิดข้อผิดพลาดในการลงทะเบียน";
         }
     }

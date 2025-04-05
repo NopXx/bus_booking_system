@@ -2,19 +2,21 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get user information
-$stmt = $pdo->prepare("SELECT * FROM User WHERE user_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$user = $stmt->fetch();
+// ดึงข้อมูลผู้ใช้
+$stmt = $conn->prepare("SELECT * FROM User WHERE user_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$user = $result->fetch_assoc();
 
-// Get recent bookings
-$stmt = $pdo->prepare("
+// ดึงข้อมูลการจองล่าสุด
+$stmt = $conn->prepare("
     SELECT t.*, s.date_travel, s.departure_time, s.arrival_time, s.priec,
            r.source, r.destination, b.bus_name
     FROM Ticket t
@@ -25,11 +27,16 @@ $stmt = $pdo->prepare("
     ORDER BY t.booking_date DESC
     LIMIT 5
 ");
-$stmt->execute([$_SESSION['user_id']]);
-$recent_bookings = $stmt->fetchAll();
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$recent_bookings = [];
+while ($row = $result->fetch_assoc()) {
+    $recent_bookings[] = $row;
+}
 
-// Get upcoming trips
-$stmt = $pdo->prepare("
+// ดึงข้อมูลการเดินทางที่กำลังจะมาถึง
+$stmt = $conn->prepare("
     SELECT t.*, s.date_travel, s.departure_time, s.arrival_time, s.priec,
            r.source, r.destination, b.bus_name, b.bus_type
     FROM Ticket t
@@ -40,11 +47,16 @@ $stmt = $pdo->prepare("
     ORDER BY s.date_travel, s.departure_time
     LIMIT 5
 ");
-$stmt->execute([$_SESSION['user_id']]);
-$upcoming_trips = $stmt->fetchAll();
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$upcoming_trips = [];
+while ($row = $result->fetch_assoc()) {
+    $upcoming_trips[] = $row;
+}
 
-// Get ticket statistics
-$stmt = $pdo->prepare("
+// ดึงสถิติตั๋ว
+$stmt = $conn->prepare("
     SELECT 
         COUNT(*) as total_tickets,
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_tickets,
@@ -56,11 +68,13 @@ $stmt = $pdo->prepare("
     JOIN Schedule s ON t.schedule_id = s.schedule_id
     WHERE t.user_id = ?
 ");
-$stmt->execute([$_SESSION['user_id']]);
-$ticket_stats = $stmt->fetch();
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$ticket_stats = $result->fetch_assoc();
 
-// Get popular routes (that the user hasn't booked yet)
-$stmt = $pdo->prepare("
+// ดึงเส้นทางยอดนิยม (ที่ผู้ใช้ยังไม่เคยจอง)
+$stmt = $conn->prepare("
     SELECT r.route_id, r.source, r.destination, COUNT(t.ticket_id) as booking_count
     FROM Route r
     JOIN Schedule s ON r.route_id = s.route_id
@@ -76,17 +90,28 @@ $stmt = $pdo->prepare("
     ORDER BY booking_count DESC
     LIMIT 3
 ");
-$stmt->execute([$_SESSION['user_id']]);
-$popular_routes = $stmt->fetchAll();
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$popular_routes = [];
+while ($row = $result->fetch_assoc()) {
+    $popular_routes[] = $row;
+}
 
-// Fetch all unique sources and destinations from Route table for search form
-$routeStmt = $pdo->query("SELECT DISTINCT source FROM Route ORDER BY source");
-$sources = $routeStmt->fetchAll(PDO::FETCH_COLUMN);
+// ดึงต้นทางและปลายทางที่ไม่ซ้ำกันจากตาราง Route สำหรับแบบฟอร์มค้นหา
+$result = $conn->query("SELECT DISTINCT source FROM Route ORDER BY source");
+$sources = [];
+while ($row = $result->fetch_assoc()) {
+    $sources[] = $row['source'];
+}
 
-$routeStmt = $pdo->query("SELECT DISTINCT destination FROM Route ORDER BY destination");
-$destinations = $routeStmt->fetchAll(PDO::FETCH_COLUMN);
+$result = $conn->query("SELECT DISTINCT destination FROM Route ORDER BY destination");
+$destinations = [];
+while ($row = $result->fetch_assoc()) {
+    $destinations[] = $row['destination'];
+}
 
-// Set minimum date to today for the date picker
+// กำหนดวันที่ขั้นต่ำเป็นวันนี้สำหรับตัวเลือกวันที่
 $min_date = date('Y-m-d');
 ?>
 

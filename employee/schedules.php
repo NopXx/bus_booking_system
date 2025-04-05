@@ -2,19 +2,21 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in as employee
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบในฐานะพนักงานหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'employee') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get employee ID
-$stmt = $pdo->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$employee = $stmt->fetch();
+// ดึงรหัสพนักงาน
+$stmt = $conn->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$employee = $result->fetch_assoc();
 $employee_id = $employee['employee_id'];
 
-// Handle form submission for adding/editing schedule
+// จัดการการส่งแบบฟอร์มสำหรับเพิ่ม/แก้ไขตารางเดินทาง
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $schedule_id = isset($_POST['schedule_id']) ? (int)$_POST['schedule_id'] : 0;
     $bus_id = (int)$_POST['bus_id'];
@@ -26,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     $errors = [];
 
-    // Validate input
+    // ตรวจสอบความถูกต้องของข้อมูลที่กรอก
     if ($bus_id <= 0) {
         $errors[] = "กรุณาเลือกรถ";
     }
@@ -49,64 +51,78 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($errors)) {
         try {
             if ($schedule_id > 0) {
-                // Update existing schedule
-                $stmt = $pdo->prepare("UPDATE Schedule SET bus_id = ?, route_id = ?, date_travel = ?, departure_time = ?, arrival_time = ?, priec = ? WHERE schedule_id = ?");
-                $stmt->execute([$bus_id, $route_id, $date_travel, $departure_time, $arrival_time, $price, $schedule_id]);
+                // อัปเดตตารางเดินทางที่มีอยู่แล้ว
+                $stmt = $conn->prepare("UPDATE Schedule SET bus_id = ?, route_id = ?, date_travel = ?, departure_time = ?, arrival_time = ?, priec = ? WHERE schedule_id = ?");
+                $stmt->bind_param("iisssdi", $bus_id, $route_id, $date_travel, $departure_time, $arrival_time, $price, $schedule_id);
+                $stmt->execute();
                 $success = "อัปเดตข้อมูลตารางเดินทางสำเร็จ";
             } else {
-                // Add new schedule
-                $stmt = $pdo->prepare("INSERT INTO Schedule (bus_id, route_id, employee_id, date_travel, departure_time, arrival_time, priec) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$bus_id, $route_id, $employee_id, $date_travel, $departure_time, $arrival_time, $price]);
+                // เพิ่มตารางเดินทางใหม่
+                $stmt = $conn->prepare("INSERT INTO Schedule (bus_id, route_id, employee_id, date_travel, departure_time, arrival_time, priec) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("iiisssd", $bus_id, $route_id, $employee_id, $date_travel, $departure_time, $arrival_time, $price);
+                $stmt->execute();
                 $success = "เพิ่มตารางเดินทางใหม่สำเร็จ";
             }
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             $errors[] = "เกิดข้อผิดพลาดในการบันทึกข้อมูล";
             echo "Error: " . $e->getMessage();
         }
     }
 }
 
-// Handle schedule deletion
+// จัดการการลบตารางเดินทาง
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $schedule_id = (int)$_GET['delete'];
 
     try {
-        // Check if schedule has any tickets
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM Ticket WHERE schedule_id = ?");
-        $stmt->execute([$schedule_id]);
-        $count = $stmt->fetchColumn();
+        // ตรวจสอบว่าตารางเดินทางมีการจองตั๋วหรือไม่
+        $stmt = $conn->prepare("SELECT COUNT(*) as count FROM Ticket WHERE schedule_id = ?");
+        $stmt->bind_param("i", $schedule_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $count = $row['count'];
 
         if ($count > 0) {
             $error = "ไม่สามารถลบตารางเดินทางได้เนื่องจากมีการจองตั๋วแล้ว";
         } else {
-            $stmt = $pdo->prepare("DELETE FROM Schedule WHERE schedule_id = ?");
-            $stmt->execute([$schedule_id]);
+            $stmt = $conn->prepare("DELETE FROM Schedule WHERE schedule_id = ?");
+            $stmt->bind_param("i", $schedule_id);
+            $stmt->execute();
             $success = "ลบตารางเดินทางสำเร็จ";
         }
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         $error = "เกิดข้อผิดพลาดในการลบตารางเดินทาง";
     }
 }
 
-// Get schedule for editing if ID is provided
+// ดึงข้อมูลตารางเดินทางสำหรับการแก้ไขหากมีการระบุ ID
 $edit_schedule = null;
 if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
     $schedule_id = (int)$_GET['edit'];
-    $stmt = $pdo->prepare("SELECT * FROM Schedule WHERE schedule_id = ?");
-    $stmt->execute([$schedule_id]);
-    $edit_schedule = $stmt->fetch();
+    $stmt = $conn->prepare("SELECT * FROM Schedule WHERE schedule_id = ?");
+    $stmt->bind_param("i", $schedule_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $edit_schedule = $result->fetch_assoc();
 }
 
-// Get all buses for dropdown
-$stmt = $pdo->query("SELECT * FROM Bus ORDER BY bus_id");
-$buses = $stmt->fetchAll();
+// ดึงข้อมูลรถทั้งหมดสำหรับดรอปดาวน์
+$result = $conn->query("SELECT * FROM Bus ORDER BY bus_id");
+$buses = [];
+while ($row = $result->fetch_assoc()) {
+    $buses[] = $row;
+}
 
-// Get all routes for dropdown
-$stmt = $pdo->query("SELECT * FROM Route ORDER BY route_id");
-$routes = $stmt->fetchAll();
+// ดึงข้อมูลเส้นทางทั้งหมดสำหรับดรอปดาวน์
+$result = $conn->query("SELECT * FROM Route ORDER BY route_id");
+$routes = [];
+while ($row = $result->fetch_assoc()) {
+    $routes[] = $row;
+}
 
-// Get all schedules with related information
-$stmt = $pdo->query("
+// ดึงข้อมูลตารางเดินทางทั้งหมดพร้อมข้อมูลที่เกี่ยวข้อง
+$result = $conn->query("
     SELECT s.*, b.bus_name, b.bus_type, r.source, r.destination, e.first_name, e.last_name
     FROM Schedule s
     JOIN Bus b ON s.bus_id = b.bus_id
@@ -114,7 +130,10 @@ $stmt = $pdo->query("
     JOIN employee e ON s.employee_id = e.employee_id
     ORDER BY s.date_travel DESC, s.departure_time ASC
 ");
-$schedules = $stmt->fetchAll();
+$schedules = [];
+while ($row = $result->fetch_assoc()) {
+    $schedules[] = $row;
+}
 ?>
 
 <div class="container-fluid mt-4">

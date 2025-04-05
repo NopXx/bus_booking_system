@@ -2,18 +2,18 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get specific ticket if ID is provided
+// ดึงข้อมูลตั๋วเฉพาะหากมีการระบุ ID
 $ticket_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $specific_ticket = null;
 
 if ($ticket_id > 0) {
-    $stmt = $pdo->prepare("
+    $stmt = $conn->prepare("
         SELECT t.*, s.date_travel, s.departure_time, s.arrival_time, s.priec,
                r.source, r.destination, b.bus_name, b.bus_type,
                e.first_name as driver_first_name, e.last_name as driver_last_name,
@@ -25,8 +25,10 @@ if ($ticket_id > 0) {
         JOIN employee e ON s.employee_id = e.employee_id
         WHERE t.ticket_id = ? AND t.user_id = ?
     ");
-    $stmt->execute([$ticket_id, $_SESSION['user_id']]);
-    $specific_ticket = $stmt->fetch();
+    $stmt->bind_param("ii", $ticket_id, $_SESSION['user_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $specific_ticket = $result->fetch_assoc();
     
     if (!$specific_ticket) {
         header('Location: /bus_booking_system/user/tickets.php');
@@ -34,22 +36,24 @@ if ($ticket_id > 0) {
     }
 }
 
-// Handle ticket cancellation
+// จัดการการยกเลิกตั๋ว
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['cancel_ticket'])) {
     $ticket_id = (int)$_POST['ticket_id'];
     
-    // Verify ticket belongs to user
-    $stmt = $pdo->prepare("
+    // ตรวจสอบว่าตั๋วเป็นของผู้ใช้
+    $stmt = $conn->prepare("
         SELECT t.*, s.date_travel
         FROM Ticket t
         JOIN Schedule s ON t.schedule_id = s.schedule_id
         WHERE t.ticket_id = ? AND t.user_id = ?
     ");
-    $stmt->execute([$ticket_id, $_SESSION['user_id']]);
-    $ticket = $stmt->fetch();
+    $stmt->bind_param("ii", $ticket_id, $_SESSION['user_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $ticket = $result->fetch_assoc();
     
     if ($ticket && $ticket['status'] != 'cancelled') {
-        // Check if departure date is at least 1 day away
+        // ตรวจสอบว่าวันเดินทางห่างจากวันนี้อย่างน้อย 1 วัน
         $departure_date = new DateTime($ticket['date_travel']);
         $today = new DateTime();
         $interval = $today->diff($departure_date);
@@ -59,16 +63,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['cancel_ticket'])) {
             $error = "ไม่สามารถยกเลิกตั๋วได้เนื่องจากใกล้วันเดินทาง กรุณาติดต่อเจ้าหน้าที่";
         } else {
             try {
-                $stmt = $pdo->prepare("UPDATE Ticket SET status = 'cancelled' WHERE ticket_id = ?");
-                $stmt->execute([$ticket_id]);
+                $stmt = $conn->prepare("UPDATE Ticket SET status = 'cancelled' WHERE ticket_id = ?");
+                $stmt->bind_param("i", $ticket_id);
+                $stmt->execute();
                 $success = "ยกเลิกตั๋วสำเร็จ";
                 
-                // If we were viewing the specific ticket, redirect to tickets list
+                // หากกำลังดูรายละเอียดตั๋วเฉพาะ ให้เปลี่ยนเส้นทางไปยังรายการตั๋ว
                 if ($specific_ticket) {
                     header('Location: /bus_booking_system/user/tickets.php?success=cancel');
                     exit();
                 }
-            } catch (PDOException $e) {
+            } catch (Exception $e) {
                 $error = "เกิดข้อผิดพลาดในการยกเลิกตั๋ว";
             }
         }
@@ -77,10 +82,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['cancel_ticket'])) {
     }
 }
 
-// Get all tickets for the user with filter
+// ดึงตั๋วทั้งหมดของผู้ใช้พร้อมตัวกรอง
 $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
 
-// Build the query with filter
+// สร้างคำสั่ง SQL พร้อมตัวกรอง
 $query = "
     SELECT t.*, s.date_travel, s.departure_time, s.arrival_time, s.priec,
            r.source, r.destination, b.bus_name, b.bus_type
@@ -91,25 +96,30 @@ $query = "
     WHERE t.user_id = ?
 ";
 
-// Add filter clause if a status is selected
+// เพิ่มเงื่อนไขการกรองหากมีการเลือกสถานะ
 if (!empty($status_filter)) {
     $query .= " AND t.status = ?";
 }
 
-// Add order clause
+// เพิ่มการเรียงลำดับ
 $query .= " ORDER BY s.date_travel DESC, t.booking_date DESC";
 
-// Prepare and execute the query
-$stmt = $pdo->prepare($query);
+// เตรียมและดำเนินการคำสั่ง SQL
+$stmt = $conn->prepare($query);
 if (!empty($status_filter)) {
-    $stmt->execute([$_SESSION['user_id'], $status_filter]);
+    $stmt->bind_param("is", $_SESSION['user_id'], $status_filter);
 } else {
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->bind_param("i", $_SESSION['user_id']);
 }
-$tickets = $stmt->fetchAll();
+$stmt->execute();
+$result = $stmt->get_result();
+$tickets = [];
+while ($row = $result->fetch_assoc()) {
+    $tickets[] = $row;
+}
 
-// Get count by status for the filter badges
-$stmt = $pdo->prepare("
+// ดึงจำนวนตั๋วตามสถานะสำหรับป้ายกรอง
+$stmt = $conn->prepare("
     SELECT 
         COUNT(*) as total,
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
@@ -119,10 +129,12 @@ $stmt = $pdo->prepare("
     FROM Ticket
     WHERE user_id = ?
 ");
-$stmt->execute([$_SESSION['user_id']]);
-$ticket_counts = $stmt->fetch();
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$ticket_counts = $result->fetch_assoc();
 
-// Get success message from redirect
+// ดึงข้อความแจ้งผลสำเร็จจากการเปลี่ยนเส้นทาง
 $success_message = '';
 if (isset($_GET['success']) && $_GET['success'] == 'cancel') {
     $success_message = "ยกเลิกตั๋วสำเร็จ";

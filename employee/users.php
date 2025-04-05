@@ -2,58 +2,65 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in as employee
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบในฐานะพนักงานหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'employee') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get employee ID
-$stmt = $pdo->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$employee = $stmt->fetch();
+// ดึงรหัสพนักงาน
+$stmt = $conn->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$employee = $result->fetch_assoc();
 $employee_id = $employee['employee_id'];
 
-// Handle user status update
+// จัดการการอัปเดตสถานะผู้ใช้
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['user_id']) && isset($_POST['action'])) {
     $user_id = (int)$_POST['user_id'];
     $action = $_POST['action'];
     
     try {
         if ($action == 'reset_password') {
-            // Generate a random password
-            $new_password = bin2hex(random_bytes(4)); // 8 characters
+            // สร้างรหัสผ่านแบบสุ่ม
+            $new_password = bin2hex(random_bytes(4)); // 8 ตัวอักษร
             $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
             
-            $stmt = $pdo->prepare("UPDATE User SET password = ? WHERE user_id = ?");
-            $stmt->execute([$hashed_password, $user_id]);
+            $stmt = $conn->prepare("UPDATE User SET password = ? WHERE user_id = ?");
+            $stmt->bind_param("si", $hashed_password, $user_id);
+            $stmt->execute();
             
             $success = "รีเซ็ตรหัสผ่านสำเร็จ: " . $new_password;
         } elseif ($action == 'delete') {
-            // Check if user has any tickets
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM Ticket WHERE user_id = ?");
-            $stmt->execute([$user_id]);
-            $count = $stmt->fetchColumn();
+            // ตรวจสอบว่าผู้ใช้มีการจองตั๋วหรือไม่
+            $stmt = $conn->prepare("SELECT COUNT(*) as count FROM Ticket WHERE user_id = ?");
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $count = $row['count'];
             
             if ($count > 0) {
                 $error = "ไม่สามารถลบผู้ใช้ได้เนื่องจากมีการจองตั๋วแล้ว";
             } else {
-                $stmt = $pdo->prepare("DELETE FROM User WHERE user_id = ?");
-                $stmt->execute([$user_id]);
+                $stmt = $conn->prepare("DELETE FROM User WHERE user_id = ?");
+                $stmt->bind_param("i", $user_id);
+                $stmt->execute();
                 $success = "ลบผู้ใช้สำเร็จ";
             }
         }
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         $error = "เกิดข้อผิดพลาดในการดำเนินการ";
     }
 }
 
-// Get specific user details if ID is provided
+// ดึงข้อมูลผู้ใช้เฉพาะรายหากมีการระบุ ID
 $user = null;
 if (isset($_GET['id']) && is_numeric($_GET['id'])) {
     $user_id = (int)$_GET['id'];
     
-    $stmt = $pdo->prepare("
+    $stmt = $conn->prepare("
         SELECT u.*, 
                (SELECT COUNT(*) FROM Ticket WHERE user_id = u.user_id) as ticket_count,
                (SELECT COUNT(*) FROM Ticket WHERE user_id = u.user_id AND status = 'pending') as pending_tickets,
@@ -63,12 +70,14 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
         FROM User u
         WHERE u.user_id = ?
     ");
-    $stmt->execute([$user_id]);
-    $user = $stmt->fetch();
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
     
     if ($user) {
-        // Get user's recent tickets
-        $stmt = $pdo->prepare("
+        // ดึงข้อมูลตั๋วล่าสุดของผู้ใช้
+        $stmt = $conn->prepare("
             SELECT t.*, s.date_travel, s.departure_time, s.arrival_time, s.priec,
                    b.bus_name, b.bus_type, r.source, r.destination
             FROM Ticket t
@@ -79,13 +88,18 @@ if (isset($_GET['id']) && is_numeric($_GET['id'])) {
             ORDER BY t.booking_date DESC
             LIMIT 5
         ");
-        $stmt->execute([$user_id]);
-        $recent_tickets = $stmt->fetchAll();
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $recent_tickets = [];
+        while ($row = $result->fetch_assoc()) {
+            $recent_tickets[] = $row;
+        }
     }
 }
 
-// Get all users with ticket counts
-$stmt = $pdo->query("
+// ดึงข้อมูลผู้ใช้ทั้งหมดพร้อมจำนวนตั๋ว
+$result = $conn->query("
     SELECT u.*, 
            (SELECT COUNT(*) FROM Ticket WHERE user_id = u.user_id) as ticket_count,
            (SELECT COUNT(*) FROM Ticket WHERE user_id = u.user_id AND status = 'pending') as pending_tickets,
@@ -95,7 +109,10 @@ $stmt = $pdo->query("
     FROM User u
     ORDER BY u.user_id DESC
 ");
-$users = $stmt->fetchAll();
+$users = [];
+while ($row = $result->fetch_assoc()) {
+    $users[] = $row;
+}
 ?>
 
 <div class="container-fluid mt-4">

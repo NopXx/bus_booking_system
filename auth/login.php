@@ -5,10 +5,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $username = $_POST['username'];
     $password = $_POST['password'];
     
-    // Check if user is an employee
-    $stmt = $pdo->prepare("SELECT * FROM employee WHERE username = ?");
-    $stmt->execute([$username]);
-    $employee = $stmt->fetch();
+    // ตรวจสอบว่าเป็นพนักงานหรือไม่
+    $stmt = $conn->prepare("SELECT * FROM employee WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $employee = $result->fetch_assoc();
     
     if ($employee && password_verify($password, $employee['password'])) {
         $_SESSION['user_id'] = $employee['employee_id'];
@@ -18,10 +20,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         exit();
     }
     
-    // Check if user is a regular user
-    $stmt = $pdo->prepare("SELECT * FROM User WHERE username = ?");
-    $stmt->execute([$username]);
-    $user = $stmt->fetch();
+    // ตรวจสอบว่าเป็นผู้ใช้ทั่วไปหรือไม่
+    $stmt = $conn->prepare("SELECT * FROM User WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
     
     if ($user && password_verify($password, $user['password'])) {
         $_SESSION['user_id'] = $user['user_id'];

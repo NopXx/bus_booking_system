@@ -2,26 +2,28 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in as employee
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบในฐานะพนักงานหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'employee') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get employee ID
-$stmt = $pdo->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$employee = $stmt->fetch();
+// ดึงรหัสพนักงาน
+$stmt = $conn->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$employee = $result->fetch_assoc();
 $employee_id = $employee['employee_id'];
 
-// Default date range (current month)
+// ช่วงวันที่เริ่มต้น (เดือนปัจจุบัน)
 $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
 $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-t');
 
-// Report type
+// ประเภทรายงาน
 $report_type = isset($_GET['type']) ? $_GET['type'] : 'booking_summary';
 
-// Get report data based on type
+// ดึงข้อมูลรายงานตามประเภท
 $report_data = [];
 $report_title = '';
 $report_description = '';
@@ -30,8 +32,8 @@ if ($report_type == 'booking_summary') {
     $report_title = 'รายงานสรุปการจองตั๋ว';
     $report_description = 'แสดงสรุปการจองตั๋วในช่วงวันที่ที่เลือก';
     
-    // Get booking summary
-    $stmt = $pdo->prepare("
+    // ดึงข้อมูลสรุปการจอง
+    $stmt = $conn->prepare("
         SELECT 
             COUNT(*) as total_bookings,
             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_bookings,
@@ -43,11 +45,13 @@ if ($report_type == 'booking_summary') {
         JOIN Schedule s ON t.schedule_id = s.schedule_id
         WHERE t.booking_date BETWEEN ? AND ?
     ");
-    $stmt->execute([$start_date, $end_date]);
-    $report_data['summary'] = $stmt->fetch();
+    $stmt->bind_param("ss", $start_date, $end_date);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $report_data['summary'] = $result->fetch_assoc();
     
-    // Get bookings by day
-    $stmt = $pdo->prepare("
+    // ดึงข้อมูลการจองรายวัน
+    $stmt = $conn->prepare("
         SELECT 
             DATE(t.booking_date) as date,
             COUNT(*) as total_bookings,
@@ -58,15 +62,20 @@ if ($report_type == 'booking_summary') {
         GROUP BY DATE(t.booking_date)
         ORDER BY date
     ");
-    $stmt->execute([$start_date, $end_date]);
-    $report_data['daily'] = $stmt->fetchAll();
+    $stmt->bind_param("ss", $start_date, $end_date);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $report_data['daily'] = [];
+    while ($row = $result->fetch_assoc()) {
+        $report_data['daily'][] = $row;
+    }
     
 } elseif ($report_type == 'route_performance') {
     $report_title = 'รายงานประสิทธิภาพเส้นทาง';
     $report_description = 'แสดงประสิทธิภาพของแต่ละเส้นทางในช่วงวันที่ที่เลือก';
     
-    // Get route performance
-    $stmt = $pdo->prepare("
+    // ดึงข้อมูลประสิทธิภาพเส้นทาง
+    $stmt = $conn->prepare("
         SELECT 
             r.route_id,
             r.source,
@@ -81,15 +90,20 @@ if ($report_type == 'booking_summary') {
         GROUP BY r.route_id, r.source, r.destination
         ORDER BY revenue DESC
     ");
-    $stmt->execute([$start_date, $end_date]);
-    $report_data['routes'] = $stmt->fetchAll();
+    $stmt->bind_param("ss", $start_date, $end_date);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $report_data['routes'] = [];
+    while ($row = $result->fetch_assoc()) {
+        $report_data['routes'][] = $row;
+    }
     
 } elseif ($report_type == 'bus_utilization') {
     $report_title = 'รายงานการใช้งานรถ';
     $report_description = 'แสดงการใช้งานรถแต่ละคันในช่วงวันที่ที่เลือก';
     
-    // Get bus utilization
-    $stmt = $pdo->prepare("
+    // ดึงข้อมูลการใช้งานรถ
+    $stmt = $conn->prepare("
         SELECT 
             b.bus_id,
             b.bus_name,
@@ -104,15 +118,20 @@ if ($report_type == 'booking_summary') {
         GROUP BY b.bus_id, b.bus_name, b.bus_type
         ORDER BY total_schedules DESC
     ");
-    $stmt->execute([$start_date, $end_date]);
-    $report_data['buses'] = $stmt->fetchAll();
+    $stmt->bind_param("ss", $start_date, $end_date);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $report_data['buses'] = [];
+    while ($row = $result->fetch_assoc()) {
+        $report_data['buses'][] = $row;
+    }
     
 } elseif ($report_type == 'employee_performance') {
     $report_title = 'รายงานประสิทธิภาพพนักงาน';
     $report_description = 'แสดงประสิทธิภาพของพนักงานแต่ละคนในช่วงวันที่ที่เลือก';
     
-    // Get employee performance
-    $stmt = $pdo->prepare("
+    // ดึงข้อมูลประสิทธิภาพพนักงาน
+    $stmt = $conn->prepare("
         SELECT 
             e.employee_id,
             e.first_name,
@@ -127,8 +146,13 @@ if ($report_type == 'booking_summary') {
         GROUP BY e.employee_id, e.first_name, e.last_name
         ORDER BY total_schedules DESC
     ");
-    $stmt->execute([$start_date, $end_date]);
-    $report_data['employees'] = $stmt->fetchAll();
+    $stmt->bind_param("ss", $start_date, $end_date);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $report_data['employees'] = [];
+    while ($row = $result->fetch_assoc()) {
+        $report_data['employees'][] = $row;
+    }
 }
 ?>
 

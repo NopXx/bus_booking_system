@@ -2,86 +2,104 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in as employee
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบในฐานะพนักงานหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'employee') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get employee information
-$stmt = $pdo->prepare("SELECT * FROM employee WHERE employee_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$employee = $stmt->fetch();
-
-// Get statistics
-// Total buses
-$stmt = $pdo->query("SELECT COUNT(*) FROM Bus");
-$total_buses = $stmt->fetchColumn();
-
-// Total routes
-$stmt = $pdo->query("SELECT COUNT(*) FROM Route");
-$total_routes = $stmt->fetchColumn();
-
-// Today's schedules
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM Schedule WHERE date_travel = CURDATE()");
+// ดึงข้อมูลพนักงาน
+$stmt = $conn->prepare("SELECT * FROM employee WHERE employee_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']);
 $stmt->execute();
-$today_schedules = $stmt->fetchColumn();
+$result = $stmt->get_result();
+$employee = $result->fetch_assoc();
 
-// Pending tickets
-$stmt = $pdo->query("SELECT COUNT(*) FROM Ticket WHERE status = 'pending'");
-$pending_tickets = $stmt->fetchColumn();
+// ดึงสถิติต่างๆ
+// จำนวนรถทั้งหมด
+$result = $conn->query("SELECT COUNT(*) as count FROM Bus");
+$row = $result->fetch_assoc();
+$total_buses = $row['count'];
 
-// Confirmed tickets
-$stmt = $pdo->query("SELECT COUNT(*) FROM Ticket WHERE status = 'confirmed'");
-$confirmed_tickets = $stmt->fetchColumn();
+// จำนวนเส้นทางทั้งหมด
+$result = $conn->query("SELECT COUNT(*) as count FROM Route");
+$row = $result->fetch_assoc();
+$total_routes = $row['count'];
 
-// Issued tickets
-$stmt = $pdo->query("SELECT COUNT(*) FROM Ticket WHERE status = 'issued'");
-$issued_tickets = $stmt->fetchColumn();
+// ตารางเดินรถวันนี้
+$stmt = $conn->prepare("SELECT COUNT(*) as count FROM Schedule WHERE date_travel = CURDATE()");
+$stmt->execute();
+$result = $stmt->get_result();
+$row = $result->fetch_assoc();
+$today_schedules = $row['count'];
 
-// Cancelled tickets
-$stmt = $pdo->query("SELECT COUNT(*) FROM Ticket WHERE status = 'cancelled'");
-$cancelled_tickets = $stmt->fetchColumn();
+// ตั๋วที่รอการยืนยัน
+$result = $conn->query("SELECT COUNT(*) as count FROM Ticket WHERE status = 'pending'");
+$row = $result->fetch_assoc();
+$pending_tickets = $row['count'];
 
-// Total users
-$stmt = $pdo->query("SELECT COUNT(*) FROM User");
-$total_users = $stmt->fetchColumn();
+// ตั๋วที่ยืนยันแล้ว
+$result = $conn->query("SELECT COUNT(*) as count FROM Ticket WHERE status = 'confirmed'");
+$row = $result->fetch_assoc();
+$confirmed_tickets = $row['count'];
 
-// Total tickets
-$stmt = $pdo->query("SELECT COUNT(*) FROM Ticket");
-$total_tickets = $stmt->fetchColumn();
+// ตั๋วที่ออกแล้ว
+$result = $conn->query("SELECT COUNT(*) as count FROM Ticket WHERE status = 'issued'");
+$row = $result->fetch_assoc();
+$issued_tickets = $row['count'];
 
-// Today's tickets
-$stmt = $pdo->prepare("
-    SELECT COUNT(*) FROM Ticket t
+// ตั๋วที่ยกเลิกแล้ว
+$result = $conn->query("SELECT COUNT(*) as count FROM Ticket WHERE status = 'cancelled'");
+$row = $result->fetch_assoc();
+$cancelled_tickets = $row['count'];
+
+// จำนวนผู้ใช้ทั้งหมด
+$result = $conn->query("SELECT COUNT(*) as count FROM User");
+$row = $result->fetch_assoc();
+$total_users = $row['count'];
+
+// จำนวนตั๋วทั้งหมด
+$result = $conn->query("SELECT COUNT(*) as count FROM Ticket");
+$row = $result->fetch_assoc();
+$total_tickets = $row['count'];
+
+// ตั๋ววันนี้
+$stmt = $conn->prepare("
+    SELECT COUNT(*) as count FROM Ticket t
     JOIN Schedule s ON t.schedule_id = s.schedule_id
     WHERE s.date_travel = CURDATE()
 ");
 $stmt->execute();
-$today_tickets = $stmt->fetchColumn();
+$result = $stmt->get_result();
+$row = $result->fetch_assoc();
+$today_tickets = $row['count'];
 
-// Total revenue
-$stmt = $pdo->prepare("
-    SELECT SUM(s.priec) FROM Ticket t
+// รายได้ทั้งหมด
+$stmt = $conn->prepare("
+    SELECT SUM(s.priec) as total FROM Ticket t
     JOIN Schedule s ON t.schedule_id = s.schedule_id
     WHERE t.status IN ('confirmed', 'issued')
 ");
 $stmt->execute();
-$total_revenue = $stmt->fetchColumn();
+$result = $stmt->get_result();
+$row = $result->fetch_assoc();
+$total_revenue = $row['total'] ?? 0;
 
-// This month's revenue
-$stmt = $pdo->prepare("
-    SELECT SUM(s.priec) FROM Ticket t
+// รายได้เดือนนี้
+$stmt = $conn->prepare("
+    SELECT SUM(s.priec) as total FROM Ticket t
     JOIN Schedule s ON t.schedule_id = s.schedule_id
     WHERE t.status IN ('confirmed', 'issued')
     AND MONTH(t.booking_date) = MONTH(CURDATE()) 
     AND YEAR(t.booking_date) = YEAR(CURDATE())
 ");
 $stmt->execute();
-$month_revenue = $stmt->fetchColumn();
+$result = $stmt->get_result();
+$row = $result->fetch_assoc();
+$month_revenue = $row['total'] ?? 0;
 
-// Recent tickets
-$stmt = $pdo->prepare("
+// ตั๋วล่าสุด
+$stmt = $conn->prepare("
     SELECT t.*, s.date_travel, s.departure_time, s.arrival_time, s.priec,
            r.source, r.destination, b.bus_name, u.first_name, u.last_name
     FROM Ticket t
@@ -93,10 +111,14 @@ $stmt = $pdo->prepare("
     LIMIT 5
 ");
 $stmt->execute();
-$recent_tickets = $stmt->fetchAll();
+$result = $stmt->get_result();
+$recent_tickets = [];
+while ($row = $result->fetch_assoc()) {
+    $recent_tickets[] = $row;
+}
 
-// Today's schedules
-$stmt = $pdo->prepare("
+// ตารางเดินรถวันนี้
+$stmt = $conn->prepare("
     SELECT s.*, r.source, r.destination, b.bus_name
     FROM Schedule s
     JOIN Route r ON s.route_id = r.route_id
@@ -105,10 +127,14 @@ $stmt = $pdo->prepare("
     ORDER BY s.departure_time
 ");
 $stmt->execute();
-$today_schedule_list = $stmt->fetchAll();
+$result = $stmt->get_result();
+$today_schedule_list = [];
+while ($row = $result->fetch_assoc()) {
+    $today_schedule_list[] = $row;
+}
 
-// Popular routes (routes with most tickets)
-$stmt = $pdo->query("
+// เส้นทางยอดนิยม (เส้นทางที่มีการจองตั๋วมากที่สุด)
+$result = $conn->query("
     SELECT r.route_id, r.source, r.destination, COUNT(t.ticket_id) as ticket_count
     FROM Route r
     JOIN Schedule s ON r.route_id = s.route_id
@@ -117,7 +143,10 @@ $stmt = $pdo->query("
     ORDER BY ticket_count DESC
     LIMIT 5
 ");
-$popular_routes = $stmt->fetchAll();
+$popular_routes = [];
+while ($row = $result->fetch_assoc()) {
+    $popular_routes[] = $row;
+}
 ?>
 
 <div class="container-fluid mt-4">

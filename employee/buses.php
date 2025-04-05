@@ -2,13 +2,13 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in as employee
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบในฐานะพนักงานหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'employee') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Handle form submission for adding/editing bus
+// จัดการการส่งแบบฟอร์มสำหรับการเพิ่ม/แก้ไขข้อมูลรถ
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $bus_id = isset($_POST['bus_id']) ? (int)$_POST['bus_id'] : 0;
     $bus_name = $_POST['bus_name'];
@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     $errors = [];
 
-    // Validate input
+    // ตรวจสอบความถูกต้องของข้อมูล
     if (empty($bus_name)) {
         $errors[] = "กรุณากรอกชื่อรถ";
     }
@@ -27,56 +27,67 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($errors)) {
         try {
             if ($bus_id > 0) {
-                // Update existing bus
-                $stmt = $pdo->prepare("UPDATE Bus SET bus_name = ?, bus_type = ? WHERE bus_id = ?");
-                $stmt->execute([$bus_name, $bus_type, $bus_id]);
+                // อัปเดตข้อมูลรถที่มีอยู่
+                $stmt = $conn->prepare("UPDATE Bus SET bus_name = ?, bus_type = ? WHERE bus_id = ?");
+                $stmt->bind_param("ssi", $bus_name, $bus_type, $bus_id);
+                $stmt->execute();
                 $success = "อัปเดตข้อมูลรถสำเร็จ";
             } else {
-                // Add new bus
-                $stmt = $pdo->prepare("INSERT INTO Bus (bus_name, bus_type) VALUES (?, ?)");
-                $stmt->execute([$bus_name, $bus_type]);
+                // เพิ่มรถใหม่
+                $stmt = $conn->prepare("INSERT INTO Bus (bus_name, bus_type) VALUES (?, ?)");
+                $stmt->bind_param("ss", $bus_name, $bus_type);
+                $stmt->execute();
                 $success = "เพิ่มรถใหม่สำเร็จ";
             }
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             $errors[] = "เกิดข้อผิดพลาดในการบันทึกข้อมูล";
         }
     }
 }
 
-// Handle bus deletion
+// จัดการการลบรถ
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $bus_id = (int)$_GET['delete'];
 
     try {
-        // Check if bus is used in any schedule
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM Schedule WHERE bus_id = ?");
-        $stmt->execute([$bus_id]);
-        $count = $stmt->fetchColumn();
+        // ตรวจสอบว่ารถถูกใช้ในตารางเดินรถหรือไม่
+        $stmt = $conn->prepare("SELECT COUNT(*) as count FROM Schedule WHERE bus_id = ?");
+        $stmt->bind_param("i", $bus_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $count = $row['count'];
 
         if ($count > 0) {
             $error = "ไม่สามารถลบรถได้เนื่องจากมีการใช้งานในตารางเดินรถ";
         } else {
-            $stmt = $pdo->prepare("DELETE FROM Bus WHERE bus_id = ?");
-            $stmt->execute([$bus_id]);
+            $stmt = $conn->prepare("DELETE FROM Bus WHERE bus_id = ?");
+            $stmt->bind_param("i", $bus_id);
+            $stmt->execute();
             $success = "ลบรถสำเร็จ";
         }
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         $error = "เกิดข้อผิดพลาดในการลบรถ";
     }
 }
 
-// Get bus for editing if ID is provided
+// ดึงข้อมูลรถสำหรับการแก้ไขหากมีการระบุ ID
 $edit_bus = null;
 if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
     $bus_id = (int)$_GET['edit'];
-    $stmt = $pdo->prepare("SELECT * FROM Bus WHERE bus_id = ?");
-    $stmt->execute([$bus_id]);
-    $edit_bus = $stmt->fetch();
+    $stmt = $conn->prepare("SELECT * FROM Bus WHERE bus_id = ?");
+    $stmt->bind_param("i", $bus_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $edit_bus = $result->fetch_assoc();
 }
 
-// Get all buses
-$stmt = $pdo->query("SELECT * FROM Bus ORDER BY bus_id");
-$buses = $stmt->fetchAll();
+// ดึงข้อมูลรถทั้งหมด
+$result = $conn->query("SELECT * FROM Bus ORDER BY bus_id");
+$buses = [];
+while ($row = $result->fetch_assoc()) {
+    $buses[] = $row;
+}
 ?>
 
 <div class="container-fluid mt-4">

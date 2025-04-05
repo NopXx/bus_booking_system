@@ -2,13 +2,13 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in as employee
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบในฐานะพนักงานหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'employee') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Handle form submission for adding/editing route
+// จัดการการส่งแบบฟอร์มสำหรับเพิ่ม/แก้ไขเส้นทาง
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $route_id = isset($_POST['route_id']) ? (int)$_POST['route_id'] : 0;
     $source = $_POST['source'];
@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     $errors = [];
 
-    // Validate input
+    // ตรวจสอบความถูกต้องของข้อมูลที่กรอก
     if (empty($source)) {
         $errors[] = "กรุณากรอกต้นทาง";
     }
@@ -28,56 +28,67 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($errors)) {
         try {
             if ($route_id > 0) {
-                // Update existing route
-                $stmt = $pdo->prepare("UPDATE Route SET source = ?, destination = ?, detail = ? WHERE route_id = ?");
-                $stmt->execute([$source, $destination, $detail, $route_id]);
+                // อัพเดทเส้นทางที่มีอยู่
+                $stmt = $conn->prepare("UPDATE Route SET source = ?, destination = ?, detail = ? WHERE route_id = ?");
+                $stmt->bind_param("sssi", $source, $destination, $detail, $route_id);
+                $stmt->execute();
                 $success = "อัปเดตข้อมูลเส้นทางสำเร็จ";
             } else {
-                // Add new route
-                $stmt = $pdo->prepare("INSERT INTO Route (source, destination, detail) VALUES (?, ?, ?)");
-                $stmt->execute([$source, $destination, $detail]);
+                // เพิ่มเส้นทางใหม่
+                $stmt = $conn->prepare("INSERT INTO Route (source, destination, detail) VALUES (?, ?, ?)");
+                $stmt->bind_param("sss", $source, $destination, $detail);
+                $stmt->execute();
                 $success = "เพิ่มเส้นทางใหม่สำเร็จ";
             }
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             $errors[] = "เกิดข้อผิดพลาดในการบันทึกข้อมูล";
         }
     }
 }
 
-// Handle route deletion
+// จัดการการลบเส้นทาง
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $route_id = (int)$_GET['delete'];
 
     try {
-        // Check if route is used in any schedule
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM Schedule WHERE route_id = ?");
-        $stmt->execute([$route_id]);
-        $count = $stmt->fetchColumn();
+        // ตรวจสอบว่าเส้นทางถูกใช้ในตารางเดินรถหรือไม่
+        $stmt = $conn->prepare("SELECT COUNT(*) as count FROM Schedule WHERE route_id = ?");
+        $stmt->bind_param("i", $route_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $count = $row['count'];
 
         if ($count > 0) {
             $error = "ไม่สามารถลบเส้นทางได้เนื่องจากมีการใช้งานในตารางเดินรถ";
         } else {
-            $stmt = $pdo->prepare("DELETE FROM Route WHERE route_id = ?");
-            $stmt->execute([$route_id]);
+            $stmt = $conn->prepare("DELETE FROM Route WHERE route_id = ?");
+            $stmt->bind_param("i", $route_id);
+            $stmt->execute();
             $success = "ลบเส้นทางสำเร็จ";
         }
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         $error = "เกิดข้อผิดพลาดในการลบเส้นทาง";
     }
 }
 
-// Get route for editing if ID is provided
+// ดึงข้อมูลเส้นทางสำหรับการแก้ไขหากมีการระบุ ID
 $edit_route = null;
 if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
     $route_id = (int)$_GET['edit'];
-    $stmt = $pdo->prepare("SELECT * FROM Route WHERE route_id = ?");
-    $stmt->execute([$route_id]);
-    $edit_route = $stmt->fetch();
+    $stmt = $conn->prepare("SELECT * FROM Route WHERE route_id = ?");
+    $stmt->bind_param("i", $route_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $edit_route = $result->fetch_assoc();
 }
 
-// Get all routes
-$stmt = $pdo->query("SELECT * FROM Route ORDER BY route_id");
-$routes = $stmt->fetchAll();
+// ดึงข้อมูลเส้นทางทั้งหมด
+$result = $conn->query("SELECT * FROM Route ORDER BY route_id");
+$routes = [];
+while ($row = $result->fetch_assoc()) {
+    $routes[] = $row;
+}
 ?>
 
 <div class="container-fluid mt-4">

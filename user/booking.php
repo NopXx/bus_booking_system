@@ -2,19 +2,19 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get schedule ID from URL if provided
+// ดึงรหัสตารางเดินรถจาก URL หากมีการระบุ
 $schedule_id = isset($_GET['schedule_id']) ? (int)$_GET['schedule_id'] : 0;
 
-// Get schedule details if schedule_id is provided
+// ดึงรายละเอียดตารางเดินรถหากมีการระบุ schedule_id
 $schedule = null;
 if ($schedule_id > 0) {
-    $stmt = $pdo->prepare("
+    $stmt = $conn->prepare("
         SELECT s.*, r.source, r.destination, r.detail, b.bus_name, b.bus_type, e.first_name, e.last_name,
                TIMEDIFF(s.arrival_time, s.departure_time) as travel_duration
         FROM Schedule s
@@ -23,84 +23,93 @@ if ($schedule_id > 0) {
         JOIN employee e ON s.employee_id = e.employee_id
         WHERE s.schedule_id = ?
     ");
-    $stmt->execute([$schedule_id]);
-    $schedule = $stmt->fetch();
+    $stmt->bind_param("i", $schedule_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $schedule = $result->fetch_assoc();
     
     if (!$schedule) {
         header('Location: /bus_booking_system/search.php');
         exit();
     }
     
-    // Get booked seats
-    $stmt = $pdo->prepare("
+    // ดึงข้อมูลที่นั่งที่ถูกจองแล้ว
+    $stmt = $conn->prepare("
         SELECT seat_number 
         FROM Ticket 
         WHERE schedule_id = ? AND status != 'cancelled'
     ");
-    $stmt->execute([$schedule_id]);
-    $booked_seats = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    $stmt->bind_param("i", $schedule_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $booked_seats = [];
+    while ($row = $result->fetch_assoc()) {
+        $booked_seats[] = $row['seat_number'];
+    }
     
-    // Get user information
-    $stmt = $pdo->prepare("SELECT * FROM User WHERE user_id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
-    $user = $stmt->fetch();
+    // ดึงข้อมูลผู้ใช้
+    $stmt = $conn->prepare("SELECT * FROM User WHERE user_id = ?");
+    $stmt->bind_param("i", $_SESSION['user_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
 }
 
-// Handle form submission
+// จัดการการส่งแบบฟอร์ม
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['schedule_id'])) {
     $schedule_id = (int)$_POST['schedule_id'];
     $seat_number = $_POST['seat_number'];
     
     $errors = [];
     
-    // Validate seat number
+    // ตรวจสอบความถูกต้องของหมายเลขที่นั่ง
     if (empty($seat_number)) {
         $errors[] = "กรุณาเลือกที่นั่ง";
     }
     
     if (empty($errors)) {
-        // Check if seat is already booked
-        $stmt = $pdo->prepare("
-            SELECT COUNT(*) 
+        // ตรวจสอบว่าที่นั่งถูกจองแล้วหรือไม่
+        $stmt = $conn->prepare("
+            SELECT COUNT(*) as count
             FROM Ticket 
             WHERE schedule_id = ? AND seat_number = ? AND status != 'cancelled'
         ");
-        $stmt->execute([$schedule_id, $seat_number]);
-        if ($stmt->fetchColumn() > 0) {
+        $stmt->bind_param("is", $schedule_id, $seat_number);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        
+        if ($row['count'] > 0) {
             $errors[] = "ที่นั่งนี้ถูกจองแล้ว กรุณาเลือกที่นั่งอื่น";
         } else {
             try {
-                // Create new ticket
-                $stmt = $pdo->prepare("
+                // สร้างตั๋วใหม่
+                $stmt = $conn->prepare("
                     INSERT INTO Ticket (
                         user_id, schedule_id, employee_id, 
                         seat_number, status, booking_date
                     ) VALUES (?, ?, ?, ?, 'pending', NOW())
                 ");
-                $stmt->execute([
-                    $_SESSION['user_id'], 
-                    $schedule_id, 
-                    $schedule['employee_id'], 
-                    $seat_number
-                ]);
+                $stmt->bind_param("iiis", $_SESSION['user_id'], $schedule_id, $schedule['employee_id'], $seat_number);
+                $stmt->execute();
                 
-                $ticket_id = $pdo->lastInsertId();
+                $ticket_id = $conn->insert_id;
                 $success = "จองตั๋วสำเร็จ กรุณารอการยืนยันจากพนักงาน";
                 $redirect_url = "/bus_booking_system/user/tickets.php?id=" . $ticket_id;
                 
-                // Redirect after a brief delay
+                // เปลี่ยนเส้นทางหลังจากหน่วงเวลาสักครู่
                 header("refresh:2;url=$redirect_url");
-            } catch (PDOException $e) {
+            } catch (Exception $e) {
                 $errors[] = "เกิดข้อผิดพลาดในการจองตั๋ว: " . $e->getMessage();
             }
         }
     }
 }
 
-// Get recent searches or popular routes if no schedule is selected
+// ดึงเส้นทางยอดนิยมหากไม่ได้เลือกตารางเวลา
 $recent_routes = [];
 if (!$schedule) {
-    $stmt = $pdo->query("
+    $result = $conn->query("
         SELECT r.route_id, r.source, r.destination, COUNT(t.ticket_id) as booking_count
         FROM Route r
         JOIN Schedule s ON r.route_id = s.route_id
@@ -109,7 +118,9 @@ if (!$schedule) {
         ORDER BY booking_count DESC
         LIMIT 3
     ");
-    $recent_routes = $stmt->fetchAll();
+    while ($row = $result->fetch_assoc()) {
+        $recent_routes[] = $row;
+    }
 }
 ?>
 

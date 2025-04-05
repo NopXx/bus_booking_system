@@ -2,57 +2,67 @@
 require_once '../includes/header.php';
 require_once '../includes/navbar.php';
 
-// Check if user is logged in as employee
+// ตรวจสอบว่าผู้ใช้เข้าสู่ระบบในฐานะพนักงานหรือไม่
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'employee') {
     header('Location: /bus_booking_system/auth/login.php');
     exit();
 }
 
-// Get employee ID
-$stmt = $pdo->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$current_employee = $stmt->fetch();
+// ดึงรหัสพนักงาน
+$stmt = $conn->prepare("SELECT employee_id FROM employee WHERE employee_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$current_employee = $result->fetch_assoc();
 $employee_id = $current_employee['employee_id'];
 
-// Handle employee status update
+// จัดการการอัปเดตสถานะพนักงาน
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['employee_id']) && isset($_POST['action'])) {
     $target_employee_id = (int)$_POST['employee_id'];
     $action = $_POST['action'];
     
     try {
         if ($action == 'reset_password') {
-            // Generate a random password
-            $new_password = bin2hex(random_bytes(4)); // 8 characters
+            // สร้างรหัสผ่านแบบสุ่ม
+            $new_password = bin2hex(random_bytes(4)); // 8 ตัวอักษร
             $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
             
-            $stmt = $pdo->prepare("UPDATE employee SET password = ? WHERE employee_id = ?");
-            $stmt->execute([$hashed_password, $target_employee_id]);
+            $stmt = $conn->prepare("UPDATE employee SET password = ? WHERE employee_id = ?");
+            $stmt->bind_param("si", $hashed_password, $target_employee_id);
+            $stmt->execute();
             
             $success = "รีเซ็ตรหัสผ่านสำเร็จ: " . $new_password;
         } elseif ($action == 'delete') {
-            // Check if employee has any schedules or tickets
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM Schedule WHERE employee_id = ?");
-            $stmt->execute([$target_employee_id]);
-            $count_schedules = $stmt->fetchColumn();
+            // ตรวจสอบว่าพนักงานมีตารางเดินทางหรือตั๋วหรือไม่
+            $stmt = $conn->prepare("SELECT COUNT(*) as count FROM Schedule WHERE employee_id = ?");
+            $stmt->bind_param("i", $target_employee_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $count_schedules = $row['count'];
             
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM Ticket WHERE employee_id = ?");
-            $stmt->execute([$target_employee_id]);
-            $count_tickets = $stmt->fetchColumn();
+            $stmt = $conn->prepare("SELECT COUNT(*) as count FROM Ticket WHERE employee_id = ?");
+            $stmt->bind_param("i", $target_employee_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $count_tickets = $row['count'];
             
             if ($count_schedules > 0 || $count_tickets > 0) {
                 $error = "ไม่สามารถลบพนักงานได้เนื่องจากมีการเชื่อมโยงกับตารางเดินทางหรือตั๋ว";
             } else {
-                $stmt = $pdo->prepare("DELETE FROM employee WHERE employee_id = ?");
-                $stmt->execute([$target_employee_id]);
+                $stmt = $conn->prepare("DELETE FROM employee WHERE employee_id = ?");
+                $stmt->bind_param("i", $target_employee_id);
+                $stmt->execute();
                 $success = "ลบพนักงานสำเร็จ";
             }
         }
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         $error = "เกิดข้อผิดพลาดในการดำเนินการ: " . $e->getMessage();
     }
 }
 
-// Handle adding new employee
+// จัดการการเพิ่มพนักงานใหม่
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_employee'])) {
     $username = $_POST['username'];
     $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
@@ -60,24 +70,29 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_employee'])) {
     $last_name = $_POST['last_name'];
     $tel = $_POST['tel'];
     
-    // Check if username already exists
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM employee WHERE username = ?");
-    $stmt->execute([$username]);
-    if ($stmt->fetchColumn() > 0) {
+    // ตรวจสอบว่าชื่อผู้ใช้มีอยู่แล้วหรือไม่
+    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM employee WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    
+    if ($row['count'] > 0) {
         $error = "ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว";
     } else {
         try {
-            $stmt = $pdo->prepare("INSERT INTO employee (username, password, first_name, last_name, tel) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$username, $password, $first_name, $last_name, $tel]);
+            $stmt = $conn->prepare("INSERT INTO employee (username, password, first_name, last_name, tel) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssss", $username, $password, $first_name, $last_name, $tel);
+            $stmt->execute();
             
             $success = "เพิ่มพนักงานใหม่สำเร็จ";
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             $error = "เกิดข้อผิดพลาดในการเพิ่มพนักงาน: " . $e->getMessage();
         }
     }
 }
 
-// Handle editing employee
+// จัดการการแก้ไขข้อมูลพนักงาน
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_employee'])) {
     $target_employee_id = (int)$_POST['employee_id'];
     $first_name = $_POST['first_name'];
@@ -87,68 +102,76 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_employee'])) {
     
     try {
         if (!empty($new_password)) {
-            // Update with new password
+            // อัปเดตพร้อมเปลี่ยนรหัสผ่านใหม่
             $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare("UPDATE employee SET first_name = ?, last_name = ?, tel = ?, password = ? WHERE employee_id = ?");
-            $stmt->execute([$first_name, $last_name, $tel, $hashed_password, $target_employee_id]);
+            $stmt = $conn->prepare("UPDATE employee SET first_name = ?, last_name = ?, tel = ?, password = ? WHERE employee_id = ?");
+            $stmt->bind_param("ssssi", $first_name, $last_name, $tel, $hashed_password, $target_employee_id);
+            $stmt->execute();
         } else {
-            // Update without changing password
-            $stmt = $pdo->prepare("UPDATE employee SET first_name = ?, last_name = ?, tel = ? WHERE employee_id = ?");
-            $stmt->execute([$first_name, $last_name, $tel, $target_employee_id]);
+            // อัปเดตโดยไม่เปลี่ยนรหัสผ่าน
+            $stmt = $conn->prepare("UPDATE employee SET first_name = ?, last_name = ?, tel = ? WHERE employee_id = ?");
+            $stmt->bind_param("sssi", $first_name, $last_name, $tel, $target_employee_id);
+            $stmt->execute();
         }
         
         $success = "อัปเดตข้อมูลพนักงานสำเร็จ";
         
-        // If we're in edit mode, refresh the employee data
+        // ถ้าอยู่ในโหมดแก้ไข ให้รีเฟรชข้อมูลพนักงาน
         if (isset($_GET['edit']) && $_GET['edit'] == $target_employee_id) {
-            $stmt = $pdo->prepare("
+            $stmt = $conn->prepare("
                 SELECT e.*, 
                     (SELECT COUNT(*) FROM Schedule WHERE employee_id = e.employee_id) as schedule_count,
                     (SELECT COUNT(*) FROM Ticket WHERE employee_id = e.employee_id) as ticket_count
                 FROM employee e
                 WHERE e.employee_id = ?
             ");
-            $stmt->execute([$target_employee_id]);
-            $edit_employee = $stmt->fetch();
+            $stmt->bind_param("i", $target_employee_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $edit_employee = $result->fetch_assoc();
         }
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         $error = "เกิดข้อผิดพลาดในการแก้ไขข้อมูลพนักงาน: " . $e->getMessage();
     }
 }
 
-// Get specific employee details if ID is provided for viewing or editing
+// ดึงข้อมูลพนักงานเฉพาะรายสำหรับการดูหรือแก้ไข
 $employee = null;
 $edit_employee = null;
 
 if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
     $target_employee_id = (int)$_GET['edit'];
     
-    $stmt = $pdo->prepare("
+    $stmt = $conn->prepare("
         SELECT e.*, 
                (SELECT COUNT(*) FROM Schedule WHERE employee_id = e.employee_id) as schedule_count,
                (SELECT COUNT(*) FROM Ticket WHERE employee_id = e.employee_id) as ticket_count
         FROM employee e
         WHERE e.employee_id = ?
     ");
-    $stmt->execute([$target_employee_id]);
-    $edit_employee = $stmt->fetch();
+    $stmt->bind_param("i", $target_employee_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $edit_employee = $result->fetch_assoc();
 } 
 else if (isset($_GET['id']) && is_numeric($_GET['id'])) {
     $target_employee_id = (int)$_GET['id'];
     
-    $stmt = $pdo->prepare("
+    $stmt = $conn->prepare("
         SELECT e.*, 
                (SELECT COUNT(*) FROM Schedule WHERE employee_id = e.employee_id) as schedule_count,
                (SELECT COUNT(*) FROM Ticket WHERE employee_id = e.employee_id) as ticket_count
         FROM employee e
         WHERE e.employee_id = ?
     ");
-    $stmt->execute([$target_employee_id]);
-    $employee = $stmt->fetch();
+    $stmt->bind_param("i", $target_employee_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $employee = $result->fetch_assoc();
     
     if ($employee) {
-        // Get employee's recent schedules
-        $stmt = $pdo->prepare("
+        // ดึงตารางเดินทางล่าสุดของพนักงาน
+        $stmt = $conn->prepare("
             SELECT s.*, r.source, r.destination, b.bus_name, b.bus_type
             FROM Schedule s
             JOIN Route r ON s.route_id = r.route_id
@@ -157,11 +180,16 @@ else if (isset($_GET['id']) && is_numeric($_GET['id'])) {
             ORDER BY s.date_travel DESC
             LIMIT 5
         ");
-        $stmt->execute([$target_employee_id]);
-        $recent_schedules = $stmt->fetchAll();
+        $stmt->bind_param("i", $target_employee_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $recent_schedules = [];
+        while ($row = $result->fetch_assoc()) {
+            $recent_schedules[] = $row;
+        }
         
-        // Get employee's recent tickets
-        $stmt = $pdo->prepare("
+        // ดึงตั๋วล่าสุดที่พนักงานดูแล
+        $stmt = $conn->prepare("
             SELECT t.*, u.first_name as user_first_name, u.last_name as user_last_name, 
                    s.date_travel, s.departure_time, r.source, r.destination
             FROM Ticket t
@@ -172,20 +200,28 @@ else if (isset($_GET['id']) && is_numeric($_GET['id'])) {
             ORDER BY t.booking_date DESC
             LIMIT 5
         ");
-        $stmt->execute([$target_employee_id]);
-        $recent_tickets = $stmt->fetchAll();
+        $stmt->bind_param("i", $target_employee_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $recent_tickets = [];
+        while ($row = $result->fetch_assoc()) {
+            $recent_tickets[] = $row;
+        }
     }
 }
 
-// Get all employees
-$stmt = $pdo->query("
+// ดึงข้อมูลพนักงานทั้งหมด
+$result = $conn->query("
     SELECT e.*, 
            (SELECT COUNT(*) FROM Schedule WHERE employee_id = e.employee_id) as schedule_count,
            (SELECT COUNT(*) FROM Ticket WHERE employee_id = e.employee_id) as ticket_count
     FROM employee e
     ORDER BY e.employee_id
 ");
-$employees = $stmt->fetchAll();
+$employees = [];
+while ($row = $result->fetch_assoc()) {
+    $employees[] = $row;
+}
 ?>
 
 <div class="container-fluid mt-4">
