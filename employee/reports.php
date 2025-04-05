@@ -336,26 +336,8 @@ if ($report_type == 'booking_summary') {
                     </table>
                 </div>
             <?php endif; ?>
-            
-            <!-- Export buttons -->
-            <div class="mt-4">
-                <button type="button" class="btn btn-success" onclick="window.print();">
-                    <i class="fas fa-print"></i> พิมพ์รายงาน
-                </button>
-                <button type="button" class="btn btn-info" onclick="exportToExcel()">
-                    <i class="fas fa-file-excel"></i> ส่งออกเป็น Excel
-                </button>
-            </div>
         </div>
     </div>
 </div>
-
-<script>
-function exportToExcel() {
-    // This is a placeholder for Excel export functionality
-    // In a real implementation, you would use a library like SheetJS or make an AJAX call to a server-side script
-    alert('ฟังก์ชันส่งออกเป็น Excel ยังไม่พร้อมใช้งาน');
-}
-</script>
 
 <?php require_once '../includes/footer.php'; ?>

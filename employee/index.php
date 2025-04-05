@@ -153,6 +153,9 @@ $popular_routes = $stmt->fetchAll();
                         <a href="/bus_booking_system/employee/users.php" class="btn btn-outline-primary">
                             <i class="fas fa-users"></i> จัดการผู้ใช้
                         </a>
+                        <a href="/bus_booking_system/employee/employees.php" class="btn btn-outline-primary">
+                            <i class="fas fa-users-gear"></i> จัดการพนักงาน
+                        </a>
                         <a href="/bus_booking_system/employee/reports.php" class="btn btn-outline-primary">
                             <i class="fas fa-chart-bar"></i> รายงาน
                         </a>

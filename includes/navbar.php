@@ -29,6 +29,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 <li><a class="dropdown-item" href="/bus_booking_system/employee/routes.php">จัดการเส้นทาง</a></li>
                                 <li><a class="dropdown-item" href="/bus_booking_system/employee/schedules.php">จัดการตารางเดินรถ</a></li>
                                 <li><a class="dropdown-item" href="/bus_booking_system/employee/tickets.php">จัดการตั๋ว</a></li>
+                                <li><a class="dropdown-item" href="/bus_booking_system/employee/users.php">จัดการผู้ใช้</a></li>
+                                <li><a class="dropdown-item" href="/bus_booking_system/employee/employees.php">จัดการพนักงาน</a></li>
+                                <li><a class="dropdown-item" href="/bus_booking_system/employee/reports.php">รายงาน</a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="/bus_booking_system/employee/profile.php">โปรไฟล์</a></li>
                                 <li><a class="dropdown-item" href="/bus_booking_system/auth/logout.php">ออกจากระบบ</a></li>

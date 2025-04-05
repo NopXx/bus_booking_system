@@ -277,10 +277,6 @@ if (isset($_GET['success']) && $_GET['success'] == 'cancel') {
                                 <a href="/bus_booking_system/user/tickets.php" class="btn btn-secondary">
                                     <i class="fas fa-arrow-left"></i> กลับไปรายการตั๋ว
                                 </a>
-                                
-                                <button class="btn btn-info ms-2" onclick="window.print();">
-                                    <i class="fas fa-print"></i> พิมพ์ตั๋ว
-                                </button>
                             </div>
                             
                             <?php if ($specific_ticket['status'] == 'pending'): ?>
