@@ -38,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <div class="container mt-5">
     <div class="row justify-content-center">
         <div class="col-md-6">
+        <a href="/bus_booking_system/" class="display-6 fw-bold mb-5 link-offset-2 link-underline link-underline-opacity-0">จองตั๋วรถโดยสารออนไลน์</a>
             <div class="card">
                 <div class="card-header bg-primary text-white">
                     <h4 class="mb-0">เข้าสู่ระบบ</h4>
