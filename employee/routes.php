@@ -14,9 +14,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $source = $_POST['source'];
     $destination = $_POST['destination'];
     $detail = $_POST['detail'];
-    
+
     $errors = [];
-    
+
     // Validate input
     if (empty($source)) {
         $errors[] = "กรุณากรอกต้นทาง";
@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($destination)) {
         $errors[] = "กรุณากรอกปลายทาง";
     }
-    
+
     if (empty($errors)) {
         try {
             if ($route_id > 0) {
@@ -47,13 +47,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 // Handle route deletion
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $route_id = (int)$_GET['delete'];
-    
+
     try {
         // Check if route is used in any schedule
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM Schedule WHERE route_id = ?");
         $stmt->execute([$route_id]);
         $count = $stmt->fetchColumn();
-        
+
         if ($count > 0) {
             $error = "ไม่สามารถลบเส้นทางได้เนื่องจากมีการใช้งานในตารางเดินรถ";
         } else {
@@ -88,40 +88,26 @@ $routes = $stmt->fetchAll();
                     <h5 class="mb-0"><?php echo $edit_route ? 'แก้ไขข้อมูลเส้นทาง' : 'เพิ่มเส้นทางใหม่'; ?></h5>
                 </div>
                 <div class="card-body">
-                    <?php if (!empty($errors)): ?>
-                        <div class="alert alert-danger">
-                            <ul class="mb-0">
-                                <?php foreach ($errors as $error): ?>
-                                    <li><?php echo $error; ?></li>
-                                <?php endforeach; ?>
-                            </ul>
-                        </div>
-                    <?php endif; ?>
-                    
-                    <?php if (isset($success)): ?>
-                        <div class="alert alert-success"><?php echo $success; ?></div>
-                    <?php endif; ?>
-                    
                     <form method="POST" action="">
                         <?php if ($edit_route): ?>
                             <input type="hidden" name="route_id" value="<?php echo $edit_route['route_id']; ?>">
                         <?php endif; ?>
-                        
+
                         <div class="mb-3">
                             <label for="source" class="form-label">ต้นทาง</label>
                             <input type="text" class="form-control" id="source" name="source" value="<?php echo $edit_route ? htmlspecialchars($edit_route['source']) : ''; ?>" required>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="destination" class="form-label">ปลายทาง</label>
                             <input type="text" class="form-control" id="destination" name="destination" value="<?php echo $edit_route ? htmlspecialchars($edit_route['destination']) : ''; ?>" required>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="detail" class="form-label">รายละเอียดเพิ่มเติม</label>
                             <textarea class="form-control" id="detail" name="detail" rows="3"><?php echo $edit_route ? htmlspecialchars($edit_route['detail']) : ''; ?></textarea>
                         </div>
-                        
+
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary"><?php echo $edit_route ? 'บันทึกการเปลี่ยนแปลง' : 'เพิ่มเส้นทาง'; ?></button>
                             <?php if ($edit_route): ?>
@@ -132,13 +118,21 @@ $routes = $stmt->fetchAll();
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-8">
             <div class="card">
                 <div class="card-header bg-primary text-white">
                     <h5 class="mb-0">รายการเส้นทางทั้งหมด</h5>
                 </div>
                 <div class="card-body">
+                    <?php if (isset($error)): ?>
+                        <div class="alert alert-danger"><?php echo $error; ?></div>
+                    <?php endif; ?>
+
+                    <?php if (isset($success)): ?>
+                        <div class="alert alert-success"><?php echo $success; ?></div>
+                    <?php endif; ?>
+
                     <?php if (empty($routes)): ?>
                         <div class="alert alert-info">ไม่มีข้อมูลเส้นทาง</div>
                     <?php else: ?>

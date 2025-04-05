@@ -23,9 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $departure_time = $_POST['departure_time'];
     $arrival_time = $_POST['arrival_time'];
     $price = (float)$_POST['price'];
-    
+
     $errors = [];
-    
+
     // Validate input
     if ($bus_id <= 0) {
         $errors[] = "กรุณาเลือกรถ";
@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($price <= 0) {
         $errors[] = "กรุณาระบุราคาที่ถูกต้อง";
     }
-    
+
     if (empty($errors)) {
         try {
             if ($schedule_id > 0) {
@@ -69,13 +69,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 // Handle schedule deletion
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $schedule_id = (int)$_GET['delete'];
-    
+
     try {
         // Check if schedule has any tickets
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM Ticket WHERE schedule_id = ?");
         $stmt->execute([$schedule_id]);
         $count = $stmt->fetchColumn();
-        
+
         if ($count > 0) {
             $error = "ไม่สามารถลบตารางเดินทางได้เนื่องจากมีการจองตั๋วแล้ว";
         } else {
@@ -134,16 +134,16 @@ $schedules = $stmt->fetchAll();
                             </ul>
                         </div>
                     <?php endif; ?>
-                    
+
                     <?php if (isset($success)): ?>
                         <div class="alert alert-success"><?php echo $success; ?></div>
                     <?php endif; ?>
-                    
+
                     <form method="POST" action="">
                         <?php if ($edit_schedule): ?>
                             <input type="hidden" name="schedule_id" value="<?php echo $edit_schedule['schedule_id']; ?>">
                         <?php endif; ?>
-                        
+
                         <div class="mb-3">
                             <label for="bus_id" class="form-label">รถ</label>
                             <select class="form-select" id="bus_id" name="bus_id" required>
@@ -155,7 +155,7 @@ $schedules = $stmt->fetchAll();
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="route_id" class="form-label">เส้นทาง</label>
                             <select class="form-select" id="route_id" name="route_id" required>
@@ -167,27 +167,27 @@ $schedules = $stmt->fetchAll();
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="date_travel" class="form-label">วันที่เดินทาง</label>
                             <input type="date" class="form-control" id="date_travel" name="date_travel" value="<?php echo $edit_schedule ? $edit_schedule['date_travel'] : ''; ?>" required>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="departure_time" class="form-label">เวลาออกเดินทาง</label>
                             <input type="time" class="form-control" id="departure_time" name="departure_time" value="<?php echo $edit_schedule ? $edit_schedule['departure_time'] : ''; ?>" required>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="arrival_time" class="form-label">เวลาที่มาถึง</label>
                             <input type="time" class="form-control" id="arrival_time" name="arrival_time" value="<?php echo $edit_schedule ? $edit_schedule['arrival_time'] : ''; ?>" required>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="price" class="form-label">ราคา (บาท)</label>
                             <input type="number" class="form-control" id="price" name="price" min="0" step="0.01" value="<?php echo $edit_schedule ? $edit_schedule['priec'] : ''; ?>" required>
                         </div>
-                        
+
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary"><?php echo $edit_schedule ? 'บันทึกการเปลี่ยนแปลง' : 'เพิ่มตารางเดินทาง'; ?></button>
                             <?php if ($edit_schedule): ?>
@@ -198,13 +198,21 @@ $schedules = $stmt->fetchAll();
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-8">
             <div class="card">
                 <div class="card-header bg-primary text-white">
                     <h5 class="mb-0">รายการตารางเดินทางทั้งหมด</h5>
                 </div>
                 <div class="card-body">
+                    <?php if (isset($error)): ?>
+                        <div class="alert alert-danger"><?php echo $error; ?></div>
+                    <?php endif; ?>
+
+                    <?php if (isset($success)): ?>
+                        <div class="alert alert-success"><?php echo $success; ?></div>
+                    <?php endif; ?>
+
                     <?php if (empty($schedules)): ?>
                         <div class="alert alert-info">ไม่มีข้อมูลตารางเดินทาง</div>
                     <?php else: ?>
@@ -226,7 +234,7 @@ $schedules = $stmt->fetchAll();
                                         <tr>
                                             <td><?php echo date('d/m/Y', strtotime($schedule['date_travel'])); ?></td>
                                             <td>
-                                                <?php echo date('H:i', strtotime($schedule['departure_time'])); ?> - 
+                                                <?php echo date('H:i', strtotime($schedule['departure_time'])); ?> -
                                                 <?php echo date('H:i', strtotime($schedule['arrival_time'])); ?>
                                             </td>
                                             <td><?php echo htmlspecialchars($schedule['bus_name'] . ' (' . $schedule['bus_type'] . ')'); ?></td>

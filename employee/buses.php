@@ -13,9 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $bus_id = isset($_POST['bus_id']) ? (int)$_POST['bus_id'] : 0;
     $bus_name = $_POST['bus_name'];
     $bus_type = $_POST['bus_type'];
-    
+
     $errors = [];
-    
+
     // Validate input
     if (empty($bus_name)) {
         $errors[] = "กรุณากรอกชื่อรถ";
@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($bus_type)) {
         $errors[] = "กรุณากรอกประเภทรถ";
     }
-    
+
     if (empty($errors)) {
         try {
             if ($bus_id > 0) {
@@ -46,13 +46,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 // Handle bus deletion
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $bus_id = (int)$_GET['delete'];
-    
+
     try {
         // Check if bus is used in any schedule
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM Schedule WHERE bus_id = ?");
         $stmt->execute([$bus_id]);
         $count = $stmt->fetchColumn();
-        
+
         if ($count > 0) {
             $error = "ไม่สามารถลบรถได้เนื่องจากมีการใช้งานในตารางเดินรถ";
         } else {
@@ -87,35 +87,21 @@ $buses = $stmt->fetchAll();
                     <h5 class="mb-0"><?php echo $edit_bus ? 'แก้ไขข้อมูลรถ' : 'เพิ่มรถใหม่'; ?></h5>
                 </div>
                 <div class="card-body">
-                    <?php if (!empty($errors)): ?>
-                        <div class="alert alert-danger">
-                            <ul class="mb-0">
-                                <?php foreach ($errors as $error): ?>
-                                    <li><?php echo $error; ?></li>
-                                <?php endforeach; ?>
-                            </ul>
-                        </div>
-                    <?php endif; ?>
-                    
-                    <?php if (isset($success)): ?>
-                        <div class="alert alert-success"><?php echo $success; ?></div>
-                    <?php endif; ?>
-                    
                     <form method="POST" action="">
                         <?php if ($edit_bus): ?>
                             <input type="hidden" name="bus_id" value="<?php echo $edit_bus['bus_id']; ?>">
                         <?php endif; ?>
-                        
+
                         <div class="mb-3">
                             <label for="bus_name" class="form-label">ชื่อรถ</label>
                             <input type="text" class="form-control" id="bus_name" name="bus_name" value="<?php echo $edit_bus ? htmlspecialchars($edit_bus['bus_name']) : ''; ?>" required>
                         </div>
-                        
+
                         <div class="mb-3">
                             <label for="bus_type" class="form-label">ประเภทรถ</label>
                             <input type="text" class="form-control" id="bus_type" name="bus_type" value="<?php echo $edit_bus ? htmlspecialchars($edit_bus['bus_type']) : ''; ?>" required>
                         </div>
-                        
+
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary"><?php echo $edit_bus ? 'บันทึกการเปลี่ยนแปลง' : 'เพิ่มรถ'; ?></button>
                             <?php if ($edit_bus): ?>
@@ -126,13 +112,21 @@ $buses = $stmt->fetchAll();
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-8">
             <div class="card">
                 <div class="card-header bg-primary text-white">
                     <h5 class="mb-0">รายการรถทั้งหมด</h5>
                 </div>
                 <div class="card-body">
+                    <?php if (isset($error)): ?>
+                        <div class="alert alert-danger"><?php echo $error; ?></div>
+                    <?php endif; ?>
+
+                    <?php if (isset($success)): ?>
+                        <div class="alert alert-success"><?php echo $success; ?></div>
+                    <?php endif; ?>
+
                     <?php if (empty($buses)): ?>
                         <div class="alert alert-info">ไม่มีข้อมูลรถ</div>
                     <?php else: ?>

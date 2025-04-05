@@ -28,6 +28,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ticket_id']) && isset(
     }
 }
 
+// Handle ticket deletion
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_ticket'])) {
+    $ticket_id = (int)$_POST['ticket_id'];
+    
+    try {
+        $stmt = $pdo->prepare("DELETE FROM Ticket WHERE ticket_id = ?");
+        $stmt->execute([$ticket_id]);
+        $success = "ลบตั๋วสำเร็จ";
+        
+        // Redirect to tickets list if we were on a specific ticket page
+        if (isset($_GET['id']) && $_GET['id'] == $ticket_id) {
+            header('Location: /bus_booking_system/employee/tickets.php');
+            exit();
+        }
+    } catch (PDOException $e) {
+        $error = "เกิดข้อผิดพลาดในการลบตั๋ว: " . $e->getMessage();
+    }
+}
+
 // Get specific ticket details if ID is provided
 $ticket = null;
 if (isset($_GET['id']) && is_numeric($_GET['id'])) {
@@ -112,21 +131,55 @@ $tickets = $stmt->fetchAll();
                     </div>
                 </div>
                 
-                <?php if ($ticket['status'] == 'pending'): ?>
-                    <div class="row mt-4">
-                        <div class="col-md-12">
-                            <h6 class="border-bottom pb-2">อัปเดตสถานะตั๋ว</h6>
-                            <form method="POST" action="" class="d-flex gap-2">
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <h6 class="border-bottom pb-2">การดำเนินการ</h6>
+                        <div class="d-flex gap-2">
+                            <?php if ($ticket['status'] == 'pending'): ?>
+                                <form method="POST" action="" class="d-inline">
+                                    <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
+                                    <input type="hidden" name="status" value="confirmed">
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-check"></i> ยืนยันการจอง
+                                    </button>
+                                </form>
+                                
+                                <form method="POST" action="" class="d-inline">
+                                    <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
+                                    <input type="hidden" name="status" value="cancelled">
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="fas fa-times"></i> ยกเลิกการจอง
+                                    </button>
+                                </form>
+                            <?php elseif ($ticket['status'] == 'confirmed'): ?>
+                                <form method="POST" action="" class="d-inline">
+                                    <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
+                                    <input type="hidden" name="status" value="issued">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-ticket-alt"></i> ออกตั๋ว
+                                    </button>
+                                </form>
+                                
+                                <form method="POST" action="" class="d-inline">
+                                    <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
+                                    <input type="hidden" name="status" value="cancelled">
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="fas fa-times"></i> ยกเลิกการจอง
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+                            
+                            <!-- Delete ticket button (for all statuses) -->
+                            <form method="POST" action="" class="d-inline" onsubmit="return confirm('คุณแน่ใจหรือไม่ที่จะลบตั๋วนี้? การดำเนินการนี้ไม่สามารถยกเลิกได้');">
                                 <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
-                                <input type="hidden" name="status" value="confirmed">
-                                <button type="submit" class="btn btn-success">
-                                    <i class="fas fa-check"></i> ยืนยันการจอง
+                                <input type="hidden" name="delete_ticket" value="1">
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="fas fa-trash"></i> ลบตั๋ว
                                 </button>
                             </form>
                         </div>
                     </div>
-                <?php elseif ($ticket['status'] == 'confirmed'): ?>
-                <?php endif; ?>
+                </div>
             </div>
         </div>
     <?php else: ?>
@@ -189,19 +242,38 @@ $tickets = $stmt->fetchAll();
                                             </span>
                                         </td>
                                         <td>
-                                            <a href="tickets.php?id=<?php echo $t['ticket_id']; ?>" class="btn btn-sm btn-info">
-                                                <i class="fas fa-eye"></i> ดูรายละเอียด
-                                            </a>
-                                            <?php if ($t['status'] == 'pending'): ?>
-                                                <form method="POST" action="" class="d-inline">
+                                            <div class="d-flex gap-1">
+                                                <a href="tickets.php?id=<?php echo $t['ticket_id']; ?>" class="btn btn-sm btn-info">
+                                                    <i class="fas fa-eye"></i> ดู
+                                                </a>
+                                                
+                                                <?php if ($t['status'] == 'pending'): ?>
+                                                    <form method="POST" action="" class="d-inline">
+                                                        <input type="hidden" name="ticket_id" value="<?php echo $t['ticket_id']; ?>">
+                                                        <input type="hidden" name="status" value="confirmed">
+                                                        <button type="submit" class="btn btn-sm btn-success">
+                                                            <i class="fas fa-check"></i> ยืนยัน
+                                                        </button>
+                                                    </form>
+                                                <?php elseif ($t['status'] == 'confirmed'): ?>
+                                                    <form method="POST" action="" class="d-inline">
+                                                        <input type="hidden" name="ticket_id" value="<?php echo $t['ticket_id']; ?>">
+                                                        <input type="hidden" name="status" value="issued">
+                                                        <button type="submit" class="btn btn-sm btn-primary">
+                                                            <i class="fas fa-ticket-alt"></i> ออกตั๋ว
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                                
+                                                <!-- Delete button for all tickets -->
+                                                <form method="POST" action="" class="d-inline" onsubmit="return confirm('คุณแน่ใจหรือไม่ที่จะลบตั๋วนี้? การดำเนินการนี้ไม่สามารถยกเลิกได้');">
                                                     <input type="hidden" name="ticket_id" value="<?php echo $t['ticket_id']; ?>">
-                                                    <input type="hidden" name="status" value="confirmed">
-                                                    <button type="submit" class="btn btn-sm btn-success">
-                                                        <i class="fas fa-check"></i> ยืนยัน
+                                                    <input type="hidden" name="delete_ticket" value="1">
+                                                    <button type="submit" class="btn btn-sm btn-danger">
+                                                        <i class="fas fa-trash"></i> ลบ
                                                     </button>
                                                 </form>
-                                            <?php elseif ($t['status'] == 'confirmed'): ?>
-                                            <?php endif; ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
